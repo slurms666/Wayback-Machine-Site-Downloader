@@ -7,6 +7,7 @@ require 'fileutils'
 require 'cgi'
 require 'json'
 require 'time'
+require 'timeout'
 require_relative 'wayback_machine_downloader/tidy_bytes'
 require_relative 'wayback_machine_downloader/to_regex'
 require_relative 'wayback_machine_downloader/archive_api'
@@ -36,6 +37,9 @@ class WaybackMachineDownloader
     @logger = params[:logger]
     @event_callback = params[:event_callback]
     @log_io = params[:log_io] || $stdout
+    @open_timeout = params[:open_timeout] ? params[:open_timeout].to_i : 20
+    @read_timeout = params[:read_timeout] ? params[:read_timeout].to_i : 120
+    @request_retries = params[:request_retries] ? params[:request_retries].to_i : 3
   end
 
   def backup_name
@@ -296,8 +300,9 @@ class WaybackMachineDownloader
         structure_dir_path dir_path
         open(file_path, "wb") do |file|
           begin
-            URI("https://web.archive.org/web/#{file_timestamp}id_/#{file_url}").open("Accept-Encoding" => "plain") do |uri|
-              file.write(uri.read)
+            archive_uri = URI("https://web.archive.org/web/#{file_timestamp}id_/#{file_url}")
+            fetch_uri_with_retries(archive_uri, "Accept-Encoding" => "plain") do |response|
+              file.write(response.read)
             end
           rescue OpenURI::HTTPError => e
             error_message = e.to_s
@@ -366,6 +371,44 @@ class WaybackMachineDownloader
   end
 
   private
+
+  def fetch_uri_with_retries(uri, headers = {})
+    attempts = 0
+
+    begin
+      attempts += 1
+      uri_open(uri, headers.merge(
+        open_timeout: @open_timeout,
+        read_timeout: @read_timeout
+      )) do |response|
+        return yield(response)
+      end
+    rescue *retryable_network_errors => e
+      raise if attempts >= @request_retries
+
+      delay_seconds = attempts
+      say "Request to #{uri} failed with #{e.class}: #{e.message}. Retrying in #{delay_seconds}s (attempt #{attempts + 1}/#{@request_retries})."
+      sleep delay_seconds
+      retry
+    end
+  end
+
+  def uri_open(uri, options = {}, &block)
+    uri.open(options, &block)
+  end
+
+  def retryable_network_errors
+    [
+      Net::OpenTimeout,
+      Net::ReadTimeout,
+      Timeout::Error,
+      EOFError,
+      Errno::ECONNRESET,
+      Errno::ETIMEDOUT,
+      SocketError,
+      IOError
+    ]
+  end
 
   def say(message = "")
     if @logger

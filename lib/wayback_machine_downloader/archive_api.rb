@@ -10,7 +10,9 @@ module ArchiveAPI
     request_url.query = URI.encode_www_form(params)
 
     begin
-      json = JSON.parse(URI(request_url).open.read)
+      json = fetch_uri_with_retries(request_url) do |response|
+        JSON.parse(response.read)
+      end
       if (json[0] <=> ["timestamp","original"]) == 0
         json.shift
       end
