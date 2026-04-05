@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Job <%= h(@job[:id]) %> | Wayback Recovery Workbench</title>
+    <link rel="stylesheet" href="/assets/style.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="job-frame">
+        <div class="job-header">
+          <div>
+            <p class="eyebrow">Recovery Job</p>
+            <h1><%= h(@job[:options]['base_url']) %></h1>
+            <p>Job ID <code><%= h(@job[:id]) %></code></p>
+          </div>
+          <div class="job-actions">
+            <span id="status-badge" class="status-pill <%= status_class(@job[:status]) %>"><%= h(@job[:status]) %></span>
+            <% if @job[:can_download] %>
+              <a id="download-link" class="button" href="<%= h(@job[:download_path]) %>">Download Artifact</a>
+            <% else %>
+              <a class="button button-secondary" href="/">Queue Another Job</a>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <h2>Files</h2>
+            <span id="files-progress"><%= h(@job[:progress]['files_processed']) %>/<%= h(@job[:progress]['files_total'] || '?') %></span>
+            <p class="muted">Processed entries from the current file queue.</p>
+          </div>
+          <div class="summary-card">
+            <h2>Artifact</h2>
+            <span id="artifact-size"><%= h(format_size(@job[:artifact_size_bytes])) %></span>
+            <p class="muted" id="artifact-name"><%= h(@job[:artifact_name] || 'Pending build') %></p>
+          </div>
+          <div class="summary-card">
+            <h2>Created</h2>
+            <span id="created-at"><%= h(format_time(@job[:created_at])) %></span>
+            <p class="muted">Started: <span id="started-at"><%= h(format_time(@job[:started_at])) %></span></p>
+          </div>
+          <div class="summary-card">
+            <h2>Finished</h2>
+            <span id="finished-at"><%= h(format_time(@job[:finished_at])) %></span>
+            <p class="muted">Duration: <span id="duration-seconds"><%= h(@job[:duration_seconds] || 'Pending') %></span></p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Progress</h2>
+          <p id="last-message"><%= h(@job[:progress]['last_message']) %></p>
+          <div class="progress-shell">
+            <div id="progress-bar" class="progress-bar" style="width: <%= progress_percent(@job[:progress]) %>%"></div>
+          </div>
+          <p class="muted" id="current-file"><%= h(@job[:progress]['current_file_url'] || 'Waiting for the next file event') %></p>
+        </div>
+
+        <section class="layout-grid">
+          <div class="panel">
+            <h2>Selected Options</h2>
+            <dl class="definition-list">
+              <% sorted_options(@job[:options]).each do |key, value| %>
+                <dt><%= h(key.to_s.tr('_', ' ')) %></dt>
+                <dd><%= h(value) %></dd>
+              <% end %>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <h2>Job Notes</h2>
+            <p class="muted">
+              This build mirrors the downloader's current feature set. Commercial services usually add a second
+              cleanup pipeline for link rewriting, CMS conversion, and content polishing after the archive is fetched.
+            </p>
+            <a class="button button-secondary" href="/">Back to dashboard</a>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Event Log</h2>
+          <div id="log-view" class="log-view"><% @log_entries.each do |entry| %>[<%= h(entry['timestamp'] || 'time') %>] <%= h(log_message(entry)) %>
+<% end %></div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const jobId = <%= @job[:id].to_json %>;
+
+      function progressPercent(progress) {
+        const total = Number(progress.files_total || 0);
+        const processed = Number(progress.files_processed || 0);
+        if (!total) return 0;
+        return Math.min(Math.round((processed / total) * 100), 100);
+      }
+
+      function sizeLabel(bytes) {
+        if (!bytes) return 'Not generated yet';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = Number(bytes);
+        let unit = units.shift();
+        while (value >= 1024 && units.length) {
+          value /= 1024;
+          unit = units.shift();
+        }
+        return `${value.toFixed(2)} ${unit}`;
+      }
+
+      function statusClass(status) {
+        switch (status) {
+          case 'completed': return 'status-completed';
+          case 'running': return 'status-running';
+          case 'failed': return 'status-failed';
+          case 'empty': return 'status-empty';
+          default: return 'status-queued';
+        }
+      }
+
+      function renderLog(entries) {
+        return (entries || []).map((entry) => `[${entry.timestamp || 'time'}] ${entry.message || entry.type}`).join('\n');
+      }
+
+      function timeLabel(value) {
+        if (!value) return 'Pending';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+      }
+
+      async function refreshJob() {
+        const response = await fetch(`/jobs/${jobId}.json`, { cache: 'no-store' });
+        if (!response.ok) return;
+
+        const job = await response.json();
+        const progress = job.progress || {};
+
+        const badge = document.getElementById('status-badge');
+        badge.textContent = job.status;
+        badge.className = `status-pill ${statusClass(job.status)}`;
+
+        document.getElementById('files-progress').textContent = `${progress.files_processed || 0}/${progress.files_total || '?'}`;
+        document.getElementById('artifact-size').textContent = sizeLabel(job.artifact_size_bytes);
+        document.getElementById('artifact-name').textContent = job.artifact_name || 'Pending build';
+        document.getElementById('created-at').textContent = timeLabel(job.created_at);
+        document.getElementById('started-at').textContent = timeLabel(job.started_at);
+        document.getElementById('finished-at').textContent = timeLabel(job.finished_at);
+        document.getElementById('duration-seconds').textContent = job.duration_seconds === null || job.duration_seconds === undefined ? 'Pending' : job.duration_seconds;
+        document.getElementById('last-message').textContent = progress.last_message || 'Waiting for updates';
+        document.getElementById('current-file').textContent = progress.current_file_url || 'Waiting for the next file event';
+        document.getElementById('progress-bar').style.width = `${progressPercent(progress)}%`;
+        document.getElementById('log-view').textContent = renderLog(job.log_entries);
+
+        let downloadLink = document.getElementById('download-link');
+        if (job.download_path) {
+          if (!downloadLink) {
+            downloadLink = document.createElement('a');
+            downloadLink.id = 'download-link';
+            downloadLink.className = 'button';
+            downloadLink.textContent = 'Download Artifact';
+            document.querySelector('.job-actions').appendChild(downloadLink);
+          }
+          downloadLink.href = job.download_path;
+        }
+      }
+
+      setInterval(refreshJob, 3000);
+      refreshJob();
+    </script>
+  </body>
+</html>

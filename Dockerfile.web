@@ -1,0 +1,10 @@
+FROM ruby:2.3
+
+WORKDIR /build
+COPY . /build
+
+RUN bundle install
+
+EXPOSE 4567
+
+CMD ["ruby", "bin/wayback_machine_server", "--host", "0.0.0.0", "--port", "4567"]

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wayback Recovery Workbench</title>
+    <link rel="stylesheet" href="/assets/style.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Wayback Recovery Workbench</p>
+            <h1>Turn archived snapshots into a downloadable site build.</h1>
+            <p>
+              This service wraps the downloader into a browser workflow: submit a target URL,
+              tune the archive filters, wait for the background job to finish, then download the result.
+            </p>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <strong>Archive output</strong>
+              <span class="metric-value">TAR.GZ</span>
+              <p class="muted">Each completed job can package the recovered files into one download.</p>
+            </div>
+            <div class="metric-card">
+              <strong>List mode</strong>
+              <span class="metric-value">JSON</span>
+              <p class="muted">If you only need the indexed Wayback URLs, export a machine-readable file list instead.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="layout-grid">
+        <div class="panel">
+          <h2>Create Recovery Job</h2>
+          <p class="muted">The grouped controls are modeled after commercial archive-recovery services, but limited to what this downloader actually supports today.</p>
+
+          <% if @error_message %>
+            <div class="alert"><%= h(@error_message) %></div>
+          <% end %>
+
+          <form method="post" action="/jobs" class="form-grid">
+            <div class="option-grid">
+              <div class="field">
+                <label for="base_url">Target URL</label>
+                <input id="base_url" name="base_url" type="text" placeholder="https://example.com" value="<%= h(field_value(@form_values, 'base_url')) %>" required>
+                <span class="hint">Plain domains are accepted too; the service will normalize them to `http://`.</span>
+              </div>
+
+              <div class="field">
+                <label for="threads_count">Concurrency</label>
+                <input id="threads_count" name="threads_count" type="number" min="1" max="8" value="<%= h(field_value(@form_values, 'threads_count')) %>">
+                <span class="hint">Higher values speed up downloads but increase pressure on the Wayback endpoints.</span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Capture Mode</h3>
+              <div class="checkbox-row">
+                <div class="checkbox">
+                  <label>
+                    <input name="exact_url" type="checkbox" value="1" <%= checked?(@form_values, 'exact_url') ? 'checked' : '' %>>
+                    <span>
+                      <strong>Exact URL only</strong><br>
+                      Download just the URL you entered instead of crawling the rest of that archived host.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="checkbox">
+                  <label>
+                    <input name="list" type="checkbox" value="1" <%= checked?(@form_values, 'list') ? 'checked' : '' %>>
+                    <span>
+                      <strong>List mode</strong><br>
+                      Skip file downloads and export the archived file list as JSON instead.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="checkbox">
+                  <label>
+                    <input name="all_timestamps" type="checkbox" value="1" <%= checked?(@form_values, 'all_timestamps') ? 'checked' : '' %>>
+                    <span>
+                      <strong>All timestamps</strong><br>
+                      Keep every archived version rather than only the latest file per path.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="checkbox">
+                  <label>
+                    <input name="all" type="checkbox" value="1" <%= checked?(@form_values, 'all') ? 'checked' : '' %>>
+                    <span>
+                      <strong>Include redirects and errors</strong><br>
+                      Save 30x, 40x, and 50x responses too instead of limiting output to `200 OK`.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Portable Output</h3>
+              <div class="checkbox-row">
+                <div class="checkbox">
+                  <label>
+                    <input name="rewrite_links" type="checkbox" value="1" <%= checked?(@form_values, 'rewrite_links') ? 'checked' : '' %>>
+                    <span>
+                      <strong>Rewrite internal links</strong><br>
+                      Convert internal archived links into portable static paths so the recovered site works better on a new host.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="checkbox">
+                  <label>
+                    <input name="clean_html" type="checkbox" value="1" <%= checked?(@form_values, 'clean_html') ? 'checked' : '' %>>
+                    <span>
+                      <strong>Clean HTML</strong><br>
+                      Strip base tags, canonical links, and leftover archive-only markup that gets in the way on a new domain.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Time Window</h3>
+              <div class="option-grid">
+                <div class="field">
+                  <label for="from_timestamp">From timestamp</label>
+                  <input id="from_timestamp" name="from_timestamp" type="text" placeholder="20060716231334" value="<%= h(field_value(@form_values, 'from_timestamp')) %>">
+                  <span class="hint">Accepts year-only values like `2006` or a full 14-digit timestamp.</span>
+                </div>
+
+                <div class="field">
+                  <label for="to_timestamp">To timestamp</label>
+                  <input id="to_timestamp" name="to_timestamp" type="text" placeholder="20100916231334" value="<%= h(field_value(@form_values, 'to_timestamp')) %>">
+                  <span class="hint">Use this to pin the archive to a known upper bound.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>Filters</h3>
+              <div class="option-grid">
+                <div class="field">
+                  <label for="only_filter">Only include</label>
+                  <input id="only_filter" name="only_filter" type="text" placeholder="/\.(gif|jpg|jpeg)$/i" value="<%= h(field_value(@form_values, 'only_filter')) %>">
+                  <span class="hint">Supports plain text or regex-style `/.../` filters.</span>
+                </div>
+
+                <div class="field">
+                  <label for="exclude_filter">Exclude</label>
+                  <input id="exclude_filter" name="exclude_filter" type="text" placeholder="admin" value="<%= h(field_value(@form_values, 'exclude_filter')) %>">
+                  <span class="hint">Useful for cutting out large folders or file types you do not need.</span>
+                </div>
+
+                <div class="field">
+                  <label for="maximum_pages">Snapshot page limit</label>
+                  <input id="maximum_pages" name="maximum_pages" type="number" min="1" max="25" value="<%= h(field_value(@form_values, 'maximum_pages')) %>">
+                  <span class="hint">This web UI caps it at 25 pages to keep jobs bounded.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="submit-row">
+              <button type="submit">Start Recovery Job</button>
+              <span class="hint">Jobs run in the background and get their own status page.</span>
+            </div>
+          </form>
+        </div>
+
+        <aside class="panel">
+          <h2>Recent Jobs</h2>
+          <% if @recent_jobs.empty? %>
+            <p class="empty-state">No jobs have been queued yet.</p>
+          <% else %>
+            <div class="recent-jobs">
+              <% @recent_jobs.each do |job| %>
+                <a class="recent-card" href="/jobs/<%= h(job['id']) %>">
+                  <div class="status-pill <%= status_class(job['status']) %>"><%= h(job['status']) %></div>
+                  <h3><%= h(job['options']['base_url']) %></h3>
+                  <p class="muted">Created <%= h(format_time(job['created_at'])) %></p>
+                  <p><%= h(job['progress']['last_message']) %></p>
+                </a>
+              <% end %>
+            </div>
+          <% end %>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

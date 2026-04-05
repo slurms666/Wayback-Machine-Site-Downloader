@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require_relative '../lib/wayback_machine_downloader/web_app'
+
+options = {
+  host: ENV['HOST'] || '127.0.0.1',
+  port: (ENV['PORT'] || 4567).to_i,
+  storage_path: ENV['STORAGE_PATH'],
+  worker_count: (ENV['WORKER_COUNT'] || 2).to_i
+}
+
+OptionParser.new do |opts|
+  opts.banner = 'Usage: wayback_machine_server [options]'
+
+  opts.on('-h', '--host HOST', String, 'Bind host (default: 127.0.0.1)') do |value|
+    options[:host] = value
+  end
+
+  opts.on('-p', '--port PORT', Integer, 'Bind port (default: 4567)') do |value|
+    options[:port] = value
+  end
+
+  opts.on('-s', '--storage PATH', String, 'Directory to persist jobs and downloads') do |value|
+    options[:storage_path] = value
+  end
+
+  opts.on('-w', '--workers COUNT', Integer, 'Background worker count (default: 2)') do |value|
+    options[:worker_count] = value
+  end
+end.parse!
+
+WaybackMachineDownloaderWebApp.new(options).start
