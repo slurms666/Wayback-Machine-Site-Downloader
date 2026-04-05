@@ -128,9 +128,11 @@ class WaybackMachineDownloaderJobStore
     return [] unless File.exist?(log_path)
 
     File.readlines(log_path).last(line_count).map do |line|
-      JSON.parse(line)
-    rescue JSON::ParserError
-      { 'type' => 'log', 'timestamp' => nil, 'message' => line.strip }
+      begin
+        JSON.parse(line)
+      rescue JSON::ParserError
+        { 'type' => 'log', 'timestamp' => nil, 'message' => line.strip }
+      end
     end
   end
 
