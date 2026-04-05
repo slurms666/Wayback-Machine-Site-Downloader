@@ -96,12 +96,7 @@ class WaybackMachineDownloader
     snapshot_list_to_consider += get_raw_list_from_api(@base_url, nil)
     notify :snapshot_page_loaded, page_index: nil, snapshot_count: snapshot_list_to_consider.length
     unless @exact_url
-      @maximum_pages.times do |page_index|
-        snapshot_list = get_raw_list_from_api(@base_url + '/*', page_index)
-        break if snapshot_list.empty?
-        snapshot_list_to_consider += snapshot_list
-        notify :snapshot_page_loaded, page_index: page_index, snapshot_count: snapshot_list.length
-      end
+      snapshot_list_to_consider += wildcard_snapshots_with_fallback
     end
     say "Found #{snapshot_list_to_consider.length} snapshots to consider."
     say
@@ -408,6 +403,47 @@ class WaybackMachineDownloader
       SocketError,
       IOError
     ]
+  end
+
+  def wildcard_snapshots_with_fallback
+    wildcard_url = @base_url + '/*'
+    snapshot_list_to_consider = []
+
+    @maximum_pages.times do |page_index|
+      begin
+        snapshot_list = get_raw_list_from_api(wildcard_url, page_index)
+      rescue OpenURI::HTTPError => e
+        status_code = http_status_from_error(e)
+
+        if status_code == 400 && page_index == 0
+          say "Wildcard CDX pagination failed for #{wildcard_url} with #{e}. Falling back to a single non-paginated wildcard request."
+          snapshot_list = get_raw_list_from_api(wildcard_url, nil)
+          break if snapshot_list.empty?
+
+          snapshot_list_to_consider += snapshot_list
+          notify :snapshot_page_loaded, page_index: :fallback, snapshot_count: snapshot_list.length
+          break
+        end
+
+        if status_code == 400
+          say "Wildcard CDX pagination stopped at page #{page_index} for #{wildcard_url} with #{e}."
+          break
+        end
+
+        raise
+      end
+
+      break if snapshot_list.empty?
+
+      snapshot_list_to_consider += snapshot_list
+      notify :snapshot_page_loaded, page_index: page_index, snapshot_count: snapshot_list.length
+    end
+
+    snapshot_list_to_consider
+  end
+
+  def http_status_from_error(error)
+    error.io.respond_to?(:status) ? error.io.status[0].to_i : nil
   end
 
   def say(message = "")

@@ -1,4 +1,5 @@
 require 'minitest/autorun'
+require 'stringio'
 
 require_relative '../lib/wayback_machine_downloader'
 
@@ -57,5 +58,45 @@ class WaybackMachineDownloaderNetworkRetryTest < Minitest::Test
       downloader.try_fetch('https://example.com')
     end
     assert_equal 3, downloader.open_attempts
+  end
+
+  class PaginationFallbackDownloader < WaybackMachineDownloader
+    attr_reader :calls
+
+    def initialize
+      super(
+        base_url: 'http://example.com',
+        exact_url: false,
+        maximum_pages: 2,
+        threads_count: 1,
+        logger: proc { |_msg| }
+      )
+      @calls = []
+    end
+
+    def get_raw_list_from_api(url, page_index)
+      @calls << [url, page_index]
+
+      case [url, page_index]
+      when ['http://example.com', nil]
+        [['20200101000000', 'http://example.com/']]
+      when ['http://example.com/*', 0]
+        raise OpenURI::HTTPError.new('400 BAD REQUEST', Struct.new(:status).new(['400', 'Bad Request']))
+      when ['http://example.com/*', nil]
+        [['20200101000001', 'http://example.com/about']]
+      else
+        []
+      end
+    end
+  end
+
+  def test_get_all_snapshots_falls_back_when_first_paginated_wildcard_request_is_rejected
+    downloader = PaginationFallbackDownloader.new
+
+    snapshots = downloader.get_all_snapshots_to_consider
+
+    assert_includes downloader.calls, ['http://example.com/*', 0]
+    assert_includes downloader.calls, ['http://example.com/*', nil]
+    assert_equal 2, snapshots.length
   end
 end

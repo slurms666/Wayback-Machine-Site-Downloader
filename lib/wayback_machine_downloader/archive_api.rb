@@ -19,6 +19,9 @@ module ArchiveAPI
       json
     rescue JSON::ParserError
       []
+    rescue OpenURI::HTTPError => e
+      say "CDX request failed: #{request_url} # #{e}"
+      raise
     end
   end
 
