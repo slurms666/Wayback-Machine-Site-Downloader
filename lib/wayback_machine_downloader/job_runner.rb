@@ -2,6 +2,7 @@ require 'json'
 require 'thread'
 require 'uri'
 
+require_relative '../wayback_machine_downloader'
 require_relative 'archive_builder'
 require_relative 'job_store'
 require_relative 'post_processor'

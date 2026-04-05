@@ -47,6 +47,7 @@ Optional server flags:
 The web UI currently exposes the downloader features that map directly to this project:
 
 - target URL
+- pasted Wayback snapshot URL normalization
 - exact URL mode
 - all timestamps mode
 - internal link rewriting for portable static hosting

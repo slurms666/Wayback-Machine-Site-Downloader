@@ -157,16 +157,19 @@ class WaybackMachineDownloaderWebApp
   end
 
   def sanitize_job_options(raw_params)
-    base_url = normalize_base_url(raw_params['base_url'])
+    exact_url = boolean_param(raw_params['exact_url'])
+    from_timestamp = sanitize_timestamp(raw_params['from_timestamp'])
+    to_timestamp = sanitize_timestamp(raw_params['to_timestamp'])
+    normalized_input = normalize_target_input(raw_params['base_url'], exact_url, from_timestamp, to_timestamp)
 
     {
-      'base_url' => base_url,
-      'exact_url' => boolean_param(raw_params['exact_url']),
+      'base_url' => normalized_input[:base_url],
+      'exact_url' => exact_url,
       'all_timestamps' => boolean_param(raw_params['all_timestamps']),
       'rewrite_links' => boolean_param(raw_params['rewrite_links']),
       'clean_html' => boolean_param(raw_params['clean_html']),
-      'from_timestamp' => sanitize_timestamp(raw_params['from_timestamp']),
-      'to_timestamp' => sanitize_timestamp(raw_params['to_timestamp']),
+      'from_timestamp' => normalized_input[:from_timestamp],
+      'to_timestamp' => normalized_input[:to_timestamp],
       'only_filter' => sanitize_text(raw_params['only_filter']),
       'exclude_filter' => sanitize_text(raw_params['exclude_filter']),
       'all' => boolean_param(raw_params['all']),
@@ -188,6 +191,51 @@ class WaybackMachineDownloaderWebApp
     value
   rescue URI::InvalidURIError
     raise ArgumentError, 'Base URL is not a valid URL'
+  end
+
+  def normalize_target_input(raw_base_url, exact_url, from_timestamp, to_timestamp)
+    normalized_url = normalize_base_url(raw_base_url)
+    snapshot_input = parse_wayback_snapshot_url(normalized_url)
+
+    return {
+      base_url: normalized_url,
+      from_timestamp: from_timestamp,
+      to_timestamp: to_timestamp
+    } unless snapshot_input
+
+    derived_base_url = exact_url ? snapshot_input[:original_url] : site_root_url(snapshot_input[:original_url])
+
+    {
+      base_url: derived_base_url,
+      from_timestamp: from_timestamp,
+      to_timestamp: to_timestamp || snapshot_input[:timestamp].to_i
+    }
+  end
+
+  def parse_wayback_snapshot_url(value)
+    uri = URI.parse(value)
+    host = uri.host.to_s.downcase
+    return nil unless host == 'web.archive.org' || host == 'archive.org'
+
+    match = uri.path.match(%r{\A/web/(\d+)(?:[a-z_]+)?/(https?:\/\/.+)\z}i)
+    return nil unless match
+
+    original_uri = URI.parse(match[2])
+    return nil unless original_uri.host
+
+    {
+      timestamp: match[1],
+      original_url: original_uri.to_s
+    }
+  rescue URI::InvalidURIError
+    nil
+  end
+
+  def site_root_url(value)
+    uri = URI.parse(value)
+    root = "#{uri.scheme}://#{uri.host}"
+    root += ":#{uri.port}" if uri.port && uri.port != uri.default_port
+    root
   end
 
   def sanitize_timestamp(value)

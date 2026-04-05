@@ -47,7 +47,7 @@
               <div class="field">
                 <label for="base_url">Target URL</label>
                 <input id="base_url" name="base_url" type="text" placeholder="https://example.com" value="<%= h(field_value(@form_values, 'base_url')) %>" required>
-                <span class="hint">Plain domains are accepted too; the service will normalize them to `http://`.</span>
+                <span class="hint">Plain domains are accepted too; the service will normalize them to `http://`. You can also paste a full Wayback snapshot URL and the service will extract the original site and archive date.</span>
               </div>
 
               <div class="field">

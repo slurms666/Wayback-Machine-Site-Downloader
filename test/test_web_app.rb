@@ -46,4 +46,26 @@ class WaybackMachineDownloaderWebAppTest < Minitest::Test
       })
     end
   end
+
+  def test_sanitize_job_options_normalizes_wayback_snapshot_url_to_site_root
+    options = @app.send(:sanitize_job_options, {
+      'base_url' => 'http://web.archive.org/web/20160808225902/http://www.webkingusa.com/index.html'
+    })
+
+    assert_equal 'http://www.webkingusa.com', options['base_url']
+    assert_equal 20160808225902, options['to_timestamp']
+    assert_nil options['from_timestamp']
+    assert_nil options['exact_url']
+  end
+
+  def test_sanitize_job_options_normalizes_wayback_snapshot_url_to_exact_target_when_requested
+    options = @app.send(:sanitize_job_options, {
+      'base_url' => 'http://web.archive.org/web/20160808225902/http://www.webkingusa.com/index.html',
+      'exact_url' => '1'
+    })
+
+    assert_equal 'http://www.webkingusa.com/index.html', options['base_url']
+    assert_equal 20160808225902, options['to_timestamp']
+    assert_equal true, options['exact_url']
+  end
 end
